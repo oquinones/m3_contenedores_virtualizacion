@@ -1,0 +1,24 @@
+# Normaliza los finales de linea de los archivos de texto.
+* text=auto
+
+# Archivos del proyecto: siempre LF.
+*.py text eol=lf
+*.pyi text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.csv text eol=lf
+*.cfg text eol=lf
+*.txt text eol=lf
+
+# Formatos binarios, si se incorporan al proyecto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Usar un driver de diff personalizado para JSON
+*.json diff=json
