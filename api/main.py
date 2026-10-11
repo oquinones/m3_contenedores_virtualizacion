@@ -44,9 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 # Mark: --- DB setup ---
-DEFAULT_DATABASE_URL = (
-    "postgresql+psycopg://postgres:PontIA2026@172.24.39.138:5432/task_db"
-)
+DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:PontIA2026@localhost:5432/task_db"
 
 
 def _build_database_url(url: str) -> str:
