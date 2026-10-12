@@ -25,6 +25,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Identity,
     Integer,
     String,
     create_engine,
@@ -57,6 +58,8 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_db: str = "task_db"
     database_url: str | None = None
+    task_id_min: int = 10_000_000
+    task_id_max: int = 99_999_999
 
     @property
     def sqlalchemy_url(self) -> str | URL:
@@ -108,7 +111,17 @@ class TaskDB(Base):
 
     __tablename__ = "tasks"
 
-    task_id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    # PostgreSQL generates 8-digit ids within [TASK_ID_MIN, TASK_ID_MAX]
+    task_id: Mapped[int] = mapped_column(
+        Integer,
+        Identity(
+            start=settings.task_id_min,
+            minvalue=settings.task_id_min,
+            maxvalue=settings.task_id_max,
+        ),
+        primary_key=True,
+        index=True,
+    )
     task_title: Mapped[str] = mapped_column(String(100), nullable=False)
     task_content: Mapped[str] = mapped_column(String(300), nullable=False)
     creation_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
@@ -171,7 +184,11 @@ class TaskResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    task_id: int
+    task_id: int = Field(
+        ge=settings.task_id_min,
+        le=settings.task_id_max,
+        description="8-digit task identifier",
+    )
     task_title: str
     task_content: str
     creation_date: datetime
@@ -325,7 +342,14 @@ def get_task_manager(db: Annotated[Session, Depends(get_db)]) -> TaskManager:
 
 
 TaskManagerDep = Annotated[TaskManager, Depends(get_task_manager)]
-TaskIdPath = Annotated[int, Path(gt=0, description="Id of the task")]
+TaskIdPath = Annotated[
+    int,
+    Path(
+        ge=settings.task_id_min,
+        le=settings.task_id_max,
+        description="8-digit id of the task",
+    ),
+]
 
 
 # Mark: --- Error handlers ---
