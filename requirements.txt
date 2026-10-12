@@ -1,5 +1,6 @@
 fastapi[standard]
 pydantic
+pydantic-settings
 sqlalchemy
 psycopg[binary]
 requests
