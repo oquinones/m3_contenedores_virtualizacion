@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 import logging
-import os
+from pathlib import Path as FilePath
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Path, Request, Response, status
@@ -19,7 +19,9 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import (
+    URL,
     Boolean,
     Date,
     DateTime,
@@ -31,20 +33,47 @@ from sqlalchemy import (
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-APP_TITLE = "Task Management API"
-APP_VERSION = "1.0.0"
-APP_DESCRIPTION = "API for Task Management"
-
-# Mark:--- Logging ---
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+BASE_DIR = FilePath(__file__).resolve().parent.parent
+ENV_FILE = BASE_DIR / ".env"
 
 
-# Mark: --- DB setup ---
-DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:PontIA2026@localhost:5432/task_db"
+# Mark: --- Settings ---
+class Settings(BaseSettings):
+    """
+    The application settings loaded from environment variables and the .env file.
+    If they are not defined, the default values listed below are used.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore"
+    )
+
+    app_title: str = "Task Management API"
+    app_version: str = "1.0.1"
+    app_description: str = "API for Task Management"
+    postgres_user: str = "postgres"
+    postgres_password: str = ""
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "task_db"
+    database_url: str | None = None
+
+    @property
+    def sqlalchemy_url(self) -> str | URL:
+        """
+        Returns DATABASE_URL if it is defined (e.g. in Docker Compose);
+        otherwise builds it from the POSTGRES_* settings.
+        """
+        if self.database_url:
+            return _build_database_url(self.database_url)
+        return URL.create(
+            drivername="postgresql+psycopg",
+            username=self.postgres_user,
+            password=self.postgres_password,
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        )
 
 
 def _build_database_url(url: str) -> str:
@@ -55,9 +84,18 @@ def _build_database_url(url: str) -> str:
     return url
 
 
-DATABASE_URL = _build_database_url(os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL))
+settings = Settings()
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+# Mark:--- Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+# Mark: --- DB setup ---
+engine = create_engine(settings.sqlalchemy_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
@@ -95,9 +133,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title=APP_TITLE,
-    description=APP_DESCRIPTION,
-    version=APP_VERSION,
+    title=settings.app_title,
+    description=settings.app_description,
+    version=settings.app_version,
     lifespan=lifespan,
 )
 

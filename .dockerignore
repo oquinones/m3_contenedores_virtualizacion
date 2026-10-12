@@ -20,3 +20,6 @@ htmlcov/
 README.md
 README_BUILD.md
 .dockerignore
+.env
+.env.example
+docker-compose.yml
