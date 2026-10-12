@@ -16,7 +16,7 @@
 - Conexión a la base de datos configurable mediante la variable de entorno `DATABASE_URL` o las variables `POSTGRES_*` del fichero `.env`.
 - Lógica de negocio encapsulada en una clase de servicio (`TaskManager`).
 - Gestión de transacciones: si falla un `commit`, se hace `rollback` y se registra el error.
-- Gestión de errores con códigos HTTP apropiados (`200`, `201`, `204`, `400`, `404`, `500`).
+- Gestión de errores con códigos HTTP apropiados (`200`, `201`, `204`, `404`, `422`, `500`).
 - Logging de las operaciones y de los errores.
 - Imagen Docker de la aplicación.
 - Despliegue de la aplicación y PostgreSQL con **Docker Compose**.
@@ -148,11 +148,11 @@ Además:
 | Método | Ruta | Descripción | Éxito | Errores |
 |--------|------|-------------|:-----:|:-------:|
 | `GET` | `/` | Información de la API | 200 | — |
-| `POST` | `/tasks/` | Crear una nueva tarea | 201 | 400 |
+| `POST` | `/tasks/` | Crear una nueva tarea | 201 | 422 |
 | `GET` | `/tasks/` | Listar todas las tareas | 200 | — |
-| `GET` | `/tasks/{task_id}` | Obtener una tarea por su id | 200 | 400, 404 |
-| `PUT` | `/tasks/{task_id}/completar` | Marcar una tarea como completada | 200 | 400, 404 |
-| `DELETE` | `/tasks/{task_id}` | Eliminar una tarea por su id | 204 | 400, 404 |
+| `GET` | `/tasks/{task_id}` | Obtener una tarea por su id | 200 | 404, 422 |
+| `PUT` | `/tasks/{task_id}/completar` | Marcar una tarea como completada | 200 | 404, 422 |
+| `DELETE` | `/tasks/{task_id}` | Eliminar una tarea por su id | 204 | 404, 422 |
 | `GET` | `/tasks/caducadas` | Listar las tareas caducadas | 200 | — |
 
 Cualquier endpoint puede devolver `500` si se produce un error no controlado (por ejemplo, si no se puede conectar con PostgreSQL).
@@ -181,7 +181,7 @@ La aplicación separa responsabilidades en capas:
    | `delete_task(task_id)` | Elimina la tarea o lanza `TaskNotFoundError` |
    | `get_expired_tasks()` | Tareas no completadas con `deadline` anterior a hoy, ordenadas por fecha |
 
-   Los endpoints no acceden directamente a la base de datos: delegan en `TaskManager`, que oculta los detalles de implementación (**encapsulamiento**) y expone una interfaz sencilla de operaciones (**abstracción**). Gracias a esta separación, el cambio de SQLite a PostgreSQL solo ha afectado a la configuración de la base de datos, no a los endpoints ni a la lógica de negocio. Los errores de negocio se lanzan como excepciones de dominio (`TaskNotFoundError`, `InvalidTaskError`) que los manejadores de errores de `api/main.py` traducen a `404` y `400`. Los datos de entrada que no superan la validación de Pydantic también devuelven `400` (en lugar del `422` por defecto de FastAPI)y un middleware captura cualquier otra excepción, la registra con su traza y devuelve `500`.
+   Los endpoints no acceden directamente a la base de datos: delegan en `TaskManager`, que oculta los detalles de implementación (**encapsulamiento**) y expone una interfaz sencilla de operaciones (**abstracción**). Gracias a esta separación, el cambio de SQLite a PostgreSQL solo ha afectado a la configuración de la base de datos, no a los endpoints ni a la lógica de negocio. Los errores de negocio se lanzan como excepciones de dominio (`TaskNotFoundError`, `InvalidTaskError`) que los manejadores de errores de `api/main.py` traducen a `404` y `422`. Los datos de entrada que no superan la validación de Pydantic también devuelven `422` (un manejador propio registra los errores en el log), y un middleware captura cualquier otra excepción, la registra con su traza y devuelve `500`.
 4. **Endpoints FastAPI**: reciben la petición, invocan al servicio y traducen el resultado (o la excepción) al código HTTP correspondiente. Cada petición abre su propia sesión de base de datos (`get_db`) y la cierra al terminar.
 
 ## Instalación
@@ -391,7 +391,7 @@ Respuesta `201` (`TaskResponse`), con los textos normalizados:
 }
 ```
 
-Errores `400`: campos obligatorios ausentes, `task_title`/`task_content` vacíos (o solo espacios) o demasiado largos, `assigned_user` con menos de 4 caracteres, fecha con formato incorrecto, o `deadline` fuera del rango [hoy, hoy + 15 días].
+Errores `422`: campos obligatorios ausentes, `task_title`/`task_content` vacíos (o solo espacios) o demasiado largos, `assigned_user` con menos de 4 caracteres, fecha con formato incorrecto, o `deadline` fuera del rango [hoy, hoy + 15 días].
 
 ### `GET /tasks/` — Listar todas las tareas
 
@@ -401,21 +401,21 @@ Respuesta `200` con una lista de `TaskResponse` ordenada por `deadline` (y por `
 
 Respuesta `200` con la tarea (`TaskResponse`).
 
-- `400`: `task_id` no es un entero de 8 dígitos entre `10000000` y `99999999` (p. ej. `/tasks/abc`, `/tasks/0` o `/tasks/100000000`).
+- `422`: `task_id` no es un entero de 8 dígitos entre `10000000` y `99999999` (p. ej. `/tasks/abc`, `/tasks/0` o `/tasks/100000000`).
 - `404`: la tarea no existe.
 
 ### `PUT /tasks/{task_id}/completar` — Marcar una tarea como completada
 
 No requiere cuerpo. Respuesta `200` con la tarea y `task_completed: true`. Es idempotente: completar una tarea ya completada devuelve `200` sin modificarla.
 
-- `400`: `task_id` no es un entero entre `10000000` y `99999999`.
+- `422`: `task_id` no es un entero entre `10000000` y `99999999`.
 - `404`: la tarea no existe.
 
 ### `DELETE /tasks/{task_id}` — Eliminar una tarea
 
 No requiere cuerpo. Respuesta `204 No Content` (sin cuerpo) si la tarea se ha eliminado. Eliminarla de nuevo devuelve `404`.
 
-- `400`: `task_id` no es un entero entre `10000000` y `99999999`.
+- `422`: `task_id` no es un entero entre `10000000` y `99999999`.
 - `404`: la tarea no existe.
 
 ### `GET /tasks/caducadas` — Listar las tareas caducadas
