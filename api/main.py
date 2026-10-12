@@ -290,6 +290,7 @@ class TaskManager:
         task = self.__db.get(TaskDB, task_id)
         if task is None:
             raise TaskNotFoundError(task_id)
+        logger.info("Task %s retrieved (deadline=%s)", task_id, task.deadline)
         return task
 
     def mark_completed(self, task_id: int) -> TaskDB:
@@ -314,6 +315,7 @@ class TaskManager:
     def list_tasks(self) -> list[TaskDB]:
         """Returns all tasks ordered by deadline."""
         stmt = select(TaskDB).order_by(TaskDB.deadline, TaskDB.task_id)
+        logger.info("Listing all tasks ordered by deadline")
         return list(self.__db.scalars(stmt))
 
     def get_expired_tasks(self) -> list[TaskDB]:
@@ -323,6 +325,7 @@ class TaskManager:
             .where(TaskDB.task_completed.is_(False), TaskDB.deadline < date.today())
             .order_by(TaskDB.deadline)
         )
+        logger.info("Listing expired tasks")
         return list(self.__db.scalars(stmt))
 
 
@@ -357,25 +360,26 @@ TaskIdPath = Annotated[
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """Returns 400 instead of 422 when the input data is invalid."""
+    """Logs the validation errors and returns 422 when the input data is invalid."""
     errors = jsonable_encoder(exc.errors())
     logger.warning(
         "Validation error on %s %s: %s", request.method, request.url.path, errors
     )
     return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": errors},
     )
 
 
 @app.exception_handler(InvalidTaskError)
 async def invalid_task_handler(request: Request, exc: InvalidTaskError) -> JSONResponse:
-    """Returns 400 when the task data is invalid."""
+    """Returns 422 when the task data violates a business rule."""
     logger.warning(
         "Business rule violated on %s %s: %s", request.method, request.url.path, exc
     )
     return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)}
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": str(exc)},
     )
 
 
