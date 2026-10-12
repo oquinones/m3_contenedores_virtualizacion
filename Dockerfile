@@ -4,7 +4,7 @@
 FROM python:3.14.8-slim
 
 # Create a non-root user to run the application
-RUN useradd -m -u 1000 appuser
+RUN useradd -m -u 1000 adminapp
 
 # Set the working directory to `/app`
 WORKDIR /app
@@ -20,8 +20,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY api/ ./api
 
 # Set ownership of the application directory to the non-root user
-RUN chown -R appuser:appuser /app
-USER appuser
+RUN chown -R adminapp:adminapp /app
+USER adminapp
 
 # Expose the port that the application will run on
 EXPOSE 8080
